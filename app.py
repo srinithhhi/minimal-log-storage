@@ -2,6 +2,11 @@ import streamlit as st
 from log_processor import process_log
 from log_storage import save_log, load_logs
 from crypto_utils import decrypt_log, verify_mac
+import os
+import hashlib
+
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
 
 st.set_page_config(page_title="Minimal Log Storage with Privacy Filters")
 
