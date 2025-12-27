@@ -4,8 +4,14 @@ import hashlib
 from cryptography.fernet import InvalidToken
 
 from log_processor import process_log
-from log_storage import save_log, load_logs
+from log_storage import save_log, load_logs, delete_log
 from crypto_utils import decrypt_log, verify_mac
+
+# -------------------------------
+# Session state
+# -------------------------------
+if "delete_success" not in st.session_state:
+    st.session_state.delete_success = False
 
 # -------------------------------
 # Admin password verification
@@ -17,7 +23,6 @@ def verify_admin_password(input_password: str) -> bool:
 
     input_hash = hashlib.sha256(input_password.encode()).hexdigest()
     return input_hash == stored_hash
-
 
 # -------------------------------
 # Streamlit config
@@ -63,7 +68,12 @@ if not logs:
     st.info("No logs stored yet.")
     st.stop()
 
-# Select a log
+# Show delete success message (after rerun)
+if st.session_state.delete_success:
+    st.success("🗑 Log deleted successfully")
+    st.session_state.delete_success = False
+
+# Select log
 selected_index = st.radio(
     "Select a log entry",
     options=list(range(len(logs))),
@@ -100,3 +110,23 @@ if st.button("Decrypt Selected Log"):
 
     except InvalidToken:
         st.error("❌ Decryption failed (invalid key or tampered data)")
+
+# -------------------------------
+# Admin log deletion
+# -------------------------------
+st.subheader("🗑 Log Deletion")
+
+delete_password = st.text_input(
+    "Admin Password (for deletion)",
+    type="password",
+    key="delete_pwd"
+)
+
+if st.button("Delete Selected Log"):
+    if not verify_admin_password(delete_password):
+        st.error("❌ Incorrect admin password")
+        st.stop()
+
+    delete_log(selected_index)
+    st.session_state.delete_success = True
+    st.rerun()
