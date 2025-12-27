@@ -1,14 +1,16 @@
 import streamlit as st
+import os
+import hashlib
+from cryptography.fernet import InvalidToken
+
 from log_processor import process_log
 from log_storage import save_log, load_logs
 from crypto_utils import decrypt_log, verify_mac
-import os
-import hashlib
 
-if "admin_authenticated" not in st.session_state:
-    st.session_state.admin_authenticated = False
-    
-def verify_admin_password(input_password):
+# -------------------------------
+# Admin password verification
+# -------------------------------
+def verify_admin_password(input_password: str) -> bool:
     stored_hash = os.getenv("ADMIN_PASSWORD_HASH")
     if not stored_hash:
         return False
@@ -16,17 +18,24 @@ def verify_admin_password(input_password):
     input_hash = hashlib.sha256(input_password.encode()).hexdigest()
     return input_hash == stored_hash
 
-st.set_page_config(page_title="Minimal Log Storage with Privacy Filters")
+
+# -------------------------------
+# Streamlit config
+# -------------------------------
+st.set_page_config(
+    page_title="Minimal Log Storage with Privacy Filters",
+    layout="centered"
+)
 
 st.title("🔐 Minimal Log Storage with Privacy Filters")
 
 st.write(
-    "This application demonstrates privacy-preserving log storage "
-    "using cryptographic techniques such as hashing, AES encryption, and MAC."
+    "Privacy-preserving log storage using hashing, AES encryption (Fernet), "
+    "and Message Authentication Codes (MAC)."
 )
 
 # -------------------------------
-# Log Input Section
+# Log input section
 # -------------------------------
 st.subheader("📥 Enter Raw Log")
 
@@ -39,12 +48,12 @@ if st.button("Process & Store Log"):
     if raw_log.strip():
         secure_log = process_log(raw_log)
         save_log(secure_log)
-        st.success("✅ Log processed and stored securely!")
+        st.success("✅ Log processed and stored securely")
     else:
-        st.warning("⚠️ Please enter a log message.")
+        st.warning("⚠️ Please enter a log message")
 
 # -------------------------------
-# View Stored Logs
+# View stored logs
 # -------------------------------
 st.subheader("📂 Stored Secure Logs")
 
@@ -52,33 +61,42 @@ logs = load_logs()
 
 if not logs:
     st.info("No logs stored yet.")
-else:
-    for i, log in enumerate(logs, start=1):
-        with st.expander(f"Log Entry {i}"):
-            st.write("**Timestamp:**", log["timestamp"])
-            st.write("**Encrypted Log:**", log["encrypted_log"])
-            st.write("**MAC:**", log["mac"])
-            
-# Admin-only decryption with password authentication
-if st.checkbox(f"Decrypt Log {i} (Admin Only)"):
+    st.stop()
 
-    if not st.session_state.admin_authenticated:
-        admin_pass = st.text_input(
-            "Enter Admin Password",
-            type="password",
-            key=f"admin_pass_{i}"
+# Select a log
+selected_index = st.radio(
+    "Select a log entry",
+    options=list(range(len(logs))),
+    format_func=lambda i: f"Log {i + 1} | {logs[i]['timestamp']}"
+)
+
+selected_log = logs[selected_index]
+
+# -------------------------------
+# Admin-only decryption
+# -------------------------------
+st.subheader("🔑 Admin Decryption")
+
+admin_password = st.text_input(
+    "Admin Password",
+    type="password"
+)
+
+if st.button("Decrypt Selected Log"):
+    if not verify_admin_password(admin_password):
+        st.error("❌ Incorrect admin password")
+        st.stop()
+
+    try:
+        decrypted = decrypt_log(
+            selected_log["encrypted_log"].encode()
         )
+        mac_valid = verify_mac(decrypted, selected_log["mac"])
 
-        if st.button("Authenticate", key=f"auth_btn_{i}"):
-            if verify_admin_password(admin_pass):
-                st.session_state.admin_authenticated = True
-                st.success("✅ Admin authenticated successfully")
-            else:
-                st.error("❌ Incorrect password")
+        st.success("🔓 Decryption Successful")
+        st.write("**Decrypted Log:**")
+        st.write(decrypted)
+        st.write("**MAC Valid:**", mac_valid)
 
-    if st.session_state.admin_authenticated:
-        decrypted = decrypt_log(log["encrypted_log"].encode())
-        mac_valid = verify_mac(decrypted, log["mac"])
-
-        st.write("🔓 **Decrypted Log:**", decrypted)
-        st.write("🛡 **MAC Valid:**", mac_valid)
+    except InvalidToken:
+        st.error("❌ Decryption failed (invalid key or tampered data)")
