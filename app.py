@@ -7,6 +7,14 @@ import hashlib
 
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
+    
+def verify_admin_password(input_password):
+    stored_hash = os.getenv("ADMIN_PASSWORD_HASH")
+    if not stored_hash:
+        return False
+
+    input_hash = hashlib.sha256(input_password.encode()).hexdigest()
+    return input_hash == stored_hash
 
 st.set_page_config(page_title="Minimal Log Storage with Privacy Filters")
 
@@ -50,11 +58,27 @@ else:
             st.write("**Timestamp:**", log["timestamp"])
             st.write("**Encrypted Log:**", log["encrypted_log"])
             st.write("**MAC:**", log["mac"])
+            
+# Admin-only decryption with password authentication
+if st.checkbox(f"Decrypt Log {i} (Admin Only)"):
 
-            # Optional admin-only decryption
-            if st.checkbox(f"Decrypt Log {i} (Admin Only)"):
-                decrypted = decrypt_log(log["encrypted_log"].encode())
-                mac_valid = verify_mac(decrypted, log["mac"])
+    if not st.session_state.admin_authenticated:
+        admin_pass = st.text_input(
+            "Enter Admin Password",
+            type="password",
+            key=f"admin_pass_{i}"
+        )
 
-                st.write("🔓 **Decrypted Log:**", decrypted)
-                st.write("🛡 **MAC Valid:**", mac_valid)
+        if st.button("Authenticate", key=f"auth_btn_{i}"):
+            if verify_admin_password(admin_pass):
+                st.session_state.admin_authenticated = True
+                st.success("✅ Admin authenticated successfully")
+            else:
+                st.error("❌ Incorrect password")
+
+    if st.session_state.admin_authenticated:
+        decrypted = decrypt_log(log["encrypted_log"].encode())
+        mac_valid = verify_mac(decrypted, log["mac"])
+
+        st.write("🔓 **Decrypted Log:**", decrypted)
+        st.write("🛡 **MAC Valid:**", mac_valid)

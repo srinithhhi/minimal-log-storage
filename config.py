@@ -1,3 +1,4 @@
+import os
 from cryptography.fernet import Fernet
 
 # -------------------------------
@@ -12,14 +13,18 @@ PRIVACY_FILTERS = {
 # -------------------------------
 # Cryptographic Configuration
 # -------------------------------
-HASH_ALGORITHM = "SHA256"   # Used for irreversible hashing
+HASH_ALGORITHM = "SHA256"
 
-# Generate this once and keep it secret
-ENCRYPTION_KEY = Fernet.generate_key()
-fernet = Fernet(ENCRYPTION_KEY)
+# Load persistent encryption key
+ENCRYPTION_KEY = os.getenv("FERNET_SECRET_KEY")
+
+if not ENCRYPTION_KEY:
+    raise RuntimeError("FERNET_SECRET_KEY not set")
+
+fernet = Fernet(ENCRYPTION_KEY.encode())
 
 # MAC settings
-MAC_KEY = b"super_secret_mac_key"
+MAC_KEY = os.getenv("MAC_SECRET_KEY").encode()
 
 # -------------------------------
 # Log Storage Configuration
